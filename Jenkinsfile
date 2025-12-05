@@ -2,7 +2,7 @@ pipeline {
     agent any
 
     environment {
-        AWS_REGION = "REPLACE_AWS_REGION"
+        AWS_REGION = "ap-south-1"
         REPO_NAME  = "scoring-service"
         IMAGE_TAG  = "latest"
     }
