@@ -1,0 +1,56 @@
+pipeline {
+    agent any
+
+    environment {
+        AWS_REGION = "REPLACE_AWS_REGION"
+        REPO_NAME  = "scoring-service"
+        IMAGE_TAG  = "latest"
+    }
+
+    stages {
+        stage('Checkout') {
+            steps { checkout scm }
+        }
+
+        stage('Unit Tests') {
+            steps {
+                sh '''
+                python3 -m venv venv
+                . venv/bin/activate
+                pip install -r requirements.txt pytest
+                pytest -q
+                '''
+            }
+        }
+
+        stage('Build Docker') {
+            steps {
+                script {
+                    env.ACCOUNT_ID = sh(script: "aws sts get-caller-identity --query Account --output text", returnStdout: true).trim()
+                }
+                sh """
+                docker build -t ${REPO_NAME}:${IMAGE_TAG} .
+                docker tag ${REPO_NAME}:${IMAGE_TAG} ${ACCOUNT_ID}.dkr.ecr.${AWS_REGION}.amazonaws.com/${REPO_NAME}:${IMAGE_TAG}
+                """
+            }
+        }
+
+        stage('Push to ECR') {
+            steps {
+                sh """
+                aws ecr get-login-password --region ${AWS_REGION} | docker login --username AWS --password-stdin ${ACCOUNT_ID}.dkr.ecr.${AWS_REGION}.amazonaws.com
+                docker push ${ACCOUNT_ID}.dkr.ecr.${AWS_REGION}.amazonaws.com/${REPO_NAME}:${IMAGE_TAG}
+                """
+            }
+        }
+
+        stage('Deploy to K8s') {
+            steps {
+                sh """
+                kubectl set image deployment/scoring-deployment scoring-container=${ACCOUNT_ID}.dkr.ecr.${AWS_REGION}.amazonaws.com/${REPO_NAME}:${IMAGE_TAG} --namespace default
+                kubectl rollout status deployment/scoring-deployment --namespace default
+                """
+            }
+        }
+    }
+}
