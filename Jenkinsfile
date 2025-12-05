@@ -24,16 +24,17 @@ pipeline {
         }
 
         stage('Build Docker') {
-            steps {
-                script {
-                    env.ACCOUNT_ID = sh(script: "aws sts get-caller-identity --query Account --output text", returnStdout: true).trim()
-                }
-                sh """
-                docker build -t ${REPO_NAME}:${IMAGE_TAG} .
-                docker tag ${REPO_NAME}:${IMAGE_TAG} ${ACCOUNT_ID}.dkr.ecr.${AWS_REGION}.amazonaws.com/${REPO_NAME}:${IMAGE_TAG}
-                """
-            }
-        }
+    steps {
+        sh """
+        # Disable AWS pager (avoid errors)
+        export AWS_PAGER=""
+
+        # Build Docker image locally
+        docker build -t ${REPO_NAME}:${IMAGE_TAG} .
+        """
+    }
+}
+
 
         stage('Push to ECR') {
             steps {
